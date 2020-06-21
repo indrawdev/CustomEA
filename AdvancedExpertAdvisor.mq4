@@ -153,8 +153,177 @@ int start()
          else 
          {
             OrderSelect(BuyTicket, SELECT_BY_TICKET);
+            double OpenPrice = OrderOpenPrice();
             
+            // Calculate stop loss
+            double StopLoss = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
+            
+            RefreshRates();
+            double UpperStopLevel = Ask + StopLevel;
+            double LowerStopLevel = Bid - StopLevel;
+            
+            double MinStop = 5 * UsePoint;
+            
+            // Calculate stop loss and take profit
+            if (StopLoss > 0) 
+            {
+               double BuyStopLoss = OpenPrice - (StopLoss * UsePoint);
+            }
+            
+            if (TakeProfit > 0) 
+            {
+               double BuyTakeProfit = OpenPrice + (StopLoss * UsePoint);
+            }
+            
+            // Verify stop loss and take profit
+            if (BuyStopLoss > 0 && BuyStopLoss > LowerStopLevel)
+            {
+               BuyStopLoss = LowerStopLevel - MinStop;
+            }
+            
+            if (BuyTakeProfit > 0 && BuyTakeProfit < UpperStopLevel)
+            {
+               BuyTakeProfit = UpperStopLevel + MinStop;
+            }
+            
+            // Modify order
+            if (IsTradeContextBusy()) Sleep(10);
+            
+            if (BuyStopLoss > 0 || BuyTakeProfit > 0)
+            {
+               bool TicketMod = OrderModify(BuyTicket, OpenPrice, BuyStopLoss, BuyTakeProfit, 0);
+               
+               // Error handling
+               if (TicketMod == false)
+               {
+                  ErrorCode = GetLastError();
+                  ErrDesc = ErrorDescription(ErrorCode);
+                  
+                  ErrAlert = StringConcatenate("Modify Buy Order - Error ", ErrorCode, ": ", ErrDesc);
+                  Alert(ErrAlert);
+                  
+                  ErrLog = StringConcatenate("Ask: ", Ask, " Bid: ", Bid, " Ticket: ", BuyTicket," Stop: ", BuyStopLoss," Profit: ", BuyTakeProfit);
+                  Print(ErrLog);
+               }
+            }
          }
+         
+         SellTicket = 0;
       }
    }
+   
+   // Sell order 
+   if (FastMA < SlowMA && SellTicket == 0)
+   {
+      OrderSelect(BuyTicket, SELECT_BY_TICKET);
+      
+      if (OrderCloseTime() == 0 && BuyTicket > 0)
+      {
+         CloseLots = OrderLots();
+         while(IsTradeContextBusy()) Sleep(10);
+         
+         RefreshRates();
+         
+         ClosePrice = Bid;
+         
+         Closed = OrderClose(BuyTicket, CloseLots, ClosePrice, UseSlippage, Red);
+         
+         // Error handling
+         if (Closed == false)
+         {
+            ErrorCode = GetLastError();
+            ErrDesc = ErrorDescription(ErrorCode);
+            
+            ErrAlert = StringConcatenate("Close Buy Order - Error ", ErrorCode, ": ", ErrDesc);
+            Alert(ErrAlert);
+            
+            ErrLog = StringConcatenate("Bid: ", Bid, " Lots: ", LotSize, " Ticket: ", BuyTicket);
+            Print(ErrLog);
+         }
+         else
+         {
+            OrderSelect(SellTicket, SELECT_BY_TICKET);
+            OpenPrice = OrderOpenPrice();
+            
+            StopLevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
+            
+            RefreshRates();
+            UpperStopLevel = Ask + StopLevel;
+            LowerStopLevel = Bid - StopLevel;
+            
+            MinStop = 5 * UsePoint;
+            if (StopLoss > 0)
+            {
+               double SellStopLoss = OpenPrice + (StopLoss * UsePoint);
+            }
+            
+            if (TakeProfit > 0)
+            {
+               double SellTakeProfit = OpenPrice - (TakeProfit * UsePoint);
+            }
+            
+            if (SellStopLoss > 0 && SellStopLoss < UpperStopLevel)
+            {
+               SellStopLoss = UpperStopLevel + MinStop;
+            }
+            
+            if (IsTradeContextBusy()) Sleep(10);
+            
+            if (SellStopLoss > 0 || SellTakeProfit > 0)
+            {
+               TicketMod = OrderModify(SellTicket, OpenPrice, SellStopLoss, SellTakeProfit, 0);
+               
+               // Error handling
+               if (TicketMod == false)
+               {
+                  ErrorCode = GetLastError();
+                  ErrDesc = ErrorDescription(ErrorCode);
+                  ErrAlert = StringConcatenate("Modify Sell Order - Error ", ErrorCode, ": ", ErrDesc);
+                  Alert(ErrAlert);
+               
+                  ErrLog = StringConcatenate("Ask: ", Ask, " Bid: ", Bid, " Ticket: ", SellTicket, " Stop: ", SellStopLoss, " Profit: ", SellTakeProfit);
+                  Print(ErrLog);
+               }
+            }
+         }
+         BuyTicket = 0;
+      }
+      
+      return(0);
+   }
+   
+   // Pip point function
+   double PipPoint(string Currency)
+   {
+      int CalcDigits = MarketInfo(Currency, MODE_DIGITS);
+      if (CalcDigits == 2 || CalcDigits == 3)
+      {
+         double CalcPoint = 0.01;
+      } 
+      else if (CalcDigits == 4 || CalcDigits == 5)
+      {
+         double CalcPoint = 0.0001;
+      }
+      
+      return (CalcPoint);
+   }
+   
+   // Get Slippage function
+   int GetSlippage(String Currency, int SlippagePips)
+   {
+      int CalcDigits = MarketInfo(Currency, MODE_DIGITS);
+      
+      if (CalcDigits == 2 || CalcDigits == 3)
+      {
+         double CalcSlippage = SlippagePips;
+      } 
+      else if (CalcDigits == 4 || CalcDigits == 5)
+      {
+         double CalcSlippage = SlippagePips * 10;
+      }
+      
+      return (CalcSlippage);
+      
+   } 
+
 }
